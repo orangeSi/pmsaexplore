@@ -1289,6 +1289,7 @@ function upload_msa(){
     reader.onload = function(e) {
         var textArea = document.getElementById("msa");
         textArea.value = e.target.result;
+		set_template();
     };
     reader.readAsText(file);
 }

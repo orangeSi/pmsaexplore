@@ -1411,6 +1411,8 @@ function read_clustal(lines){
 			var cseq = record_set[j].split(/\s+/)[1];
 			if(head){
 				seq_list.push(head);
+				console.log(seq_list.length);
+				console.log(seq_list.size);
 				if(seq_list.size != seq_list.length){
 					alert("error: 遇到重复的 id -> "+ head);
 					return {};

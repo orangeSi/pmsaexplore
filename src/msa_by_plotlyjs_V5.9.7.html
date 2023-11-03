@@ -244,7 +244,7 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 上传本地序列比对文件： <input type="file" id = "upfile" > <input type="button" onclick="upload_msa()" value="上传！" />
 <br>
-测tm的： <input type="button" onclick="read_clustal()" value="ZHAN" />
+测tm的： <input type="button" onclick="test_run_read_clustal()" value="ZHAN" />
 <br>
 按照序列名称进行排序: <input type="checkbox" id="if_sort_seq_name" >
 <br>
@@ -850,6 +850,12 @@ function cut_seq_by_start_end(){
 	console.log("cut_seq_res = " + outval);
 }
 
+
+//stupid function for testing read_clustal
+function test_run_read_clustal(){
+	var msa_str = document.getElementById("msa").value;
+	read_clustal(msa_str);
+}
 
 function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value, btn_new_value){
 	if(btn_raw_value != "" && btn_new_value != ""){

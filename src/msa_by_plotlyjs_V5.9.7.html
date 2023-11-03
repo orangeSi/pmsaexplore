@@ -867,7 +867,7 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 	}
 	//msa format check
 	var msa_str = document.getElementById("msa").value;
-	var format = format_check(msa_str)
+	var format = format_check(msa_str);
 	if(format == 'fasta'){
 		// read msa fasta
 		console.log("输入格式为fasta");
@@ -1306,9 +1306,23 @@ function change_template_id(e){
 }
 
 // 设置默认的template id 并且检查msa的序列长度是否一致！
+// branch read_clustal v1.1.8 update: support template setting for clustal-format files
 function set_template(){
 	var msa_str = document.getElementById("msa").value;
-	var msa = read_fasta(msa_str);
+	var format = format_check(msa_str);
+	if(format == 'fasta'){
+		// read msa fasta
+		console.log("输入格式为fasta");
+		var msa = read_fasta(msa_str);
+	} else if(format == 'clustal'){
+		// read msa clustal
+		console.log("输入格式为clustal");
+		var msa = read_clustal(msa_str);
+	}else{
+		alert("Unknown format, failed to read alignment data.");
+		var msa = "";
+	}
+
 	var default_template_id = Object.keys(msa)[0];
 	var seq_number = Object.keys(msa).length;
 	document.getElementById('seq_number').innerHTML=" 如下一共"+seq_number+"条序列 ";

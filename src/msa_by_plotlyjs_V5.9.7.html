@@ -244,6 +244,8 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 上传本地序列比对文件： <input type="file" id = "upfile" > <input type="button" onclick="upload_msa()" value="上传！" />
 <br>
+测tm的： <input type="button" onclick="read_clustal()" value="ZHAN" />
+<br>
 按照序列名称进行排序: <input type="checkbox" id="if_sort_seq_name" >
 <br>
 对序列名称做关键字匹配: <input type="text" id="seq_name_match_keyword" value="" placeholder="支持regex" > <tspan id="seq_num_after_filter"></tspan>
@@ -1433,7 +1435,8 @@ function read_clustal(lines){
 				last_seq_list = seq_list;
 			}
 	}
-	return res;
+	consle.log(res);
+	//return res;
 }
 
 

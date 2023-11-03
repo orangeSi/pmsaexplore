@@ -38,7 +38,7 @@
 
 
 
- <p>输入fasta格式的MSA序列(<tspan id="seq_number"></tspan>): <input type="button" onclick="clear_msa()" value="Clear Current sMSA" /></p>
+ <p>输入fasta或clustal格式的MSA序列(<tspan id="seq_number"></tspan>): <input type="button" onclick="clear_msa()" value="Clear Current sMSA" /></p>
  <textarea id="msa" name="msa" rows="20" cols="100" onchange="set_template()">
 >UrCas13d-HA
 -----------MAKKNKMKPRELREAQKKARQL--KAAEINNNAAPA--IAAMPAAEVIA
@@ -857,9 +857,19 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 		console.log("startt ddddd="+btn.value);
 		
 	}
-	// read msa fasta
+	//msa format check
 	var msa_str = document.getElementById("msa").value;
-	var msa = read_fasta(msa_str);
+	var format = format_check(msa_str)
+	if(format == 'fasta'){
+		// read msa fasta
+		var msa = read_fasta(msa_str);
+	} else if(format == 'clustal'){
+		// read msa clustal
+		var msa = read_clustal(msa_str);
+	}else{
+		alert("Unknown format, failed to read alignment data.");
+		var msa = "";
+	}
 	msa = filter_seq_name(msa);
 	msa = change_msa_seq_order(msa);
 	console.log("msa=");
@@ -1320,6 +1330,20 @@ function set_template(){
 	console.log(document.getElementById("templateid-select"));
 }
 
+function format_check(lines){
+	var format = "";
+	var first_line = lines.split(/\n+/)[0];
+	if(first_line.match(/CLUSTAL|clustal/)){
+		format = "clustal";
+		return format;
+	}else if(first_line.match(/^>[\S|\s]*/)){
+		format = "fasta";
+		return format;
+	}else{
+		alert("error: invalid input format, should be either fasta format or clustal format");
+		return format;
+	}	
+}
 
 function read_fasta(lines){
 	var res = {};
@@ -1358,6 +1382,57 @@ function read_fasta(lines){
 		
 	}
 	//console.log(res);
+	return res;
+}
+
+function read_clustal(lines){
+	var res = {};
+	//var lines_arr = lines.replace(/^\s*/,'').split(/\n+/);
+	var first_line = lines.split('\n')[0];
+	var lines_arr = lines.replace(first_line,'').replace(/^\s*/,'').replace(/\s*$/,'').split(/\n[^\S]*\n/)
+
+	//check alignment block format
+	var last_seq_list = [];
+	for(var i = 0; i < lines_arr.length; i++){
+		var seq_list = [];
+		var block = lines_arr[i];
+		var record_set = block.split(/\n/);
+		var seq_set = {};
+		for(var j=0;j < record_set.length; j++){
+			var head = record_set.split(/\s+/)[0];
+			var cseq = record_set.split(/\s+/)[1];
+			if(head){
+				seq_list.push(head);
+				if(seq_list.size != seq_list.length){
+					alert("error: 遇到重复的 id -> "+ head);
+					return {};
+				}
+				if(!( head.match(/.*\S.*/) )){
+					alert("error: id 格式错误? "+e);
+					return {};
+				}
+				if(!( cseq.match(/\S+/) )){
+					alert("error: 序列内包括空格? "+e);
+					return {};
+				}	
+			}
+			if(! Object.keys(res).includes(record_set.split(/\s+/)[0])){
+				res[head] = cseq;
+			}else{
+				res[head] += cseq;
+			}
+			
+		}
+		if(i == 0){
+			last_seq_list = seq_list;
+			}else{
+				if(seq_list.length != last_seq_list.length){
+					alert("error: 参与比对的序列数量前后不一致!");
+					return {};
+				}
+				last_seq_list = seq_list;
+			}
+	}
 	return res;
 }
 

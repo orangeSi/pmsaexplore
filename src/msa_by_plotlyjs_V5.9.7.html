@@ -1407,8 +1407,8 @@ function read_clustal(lines){
 		var record_set = block.split(/\n/);
 		var seq_set = {};
 		for(var j=0;j < record_set.length; j++){
-			var head = record_set.split(/\s+/)[0];
-			var cseq = record_set.split(/\s+/)[1];
+			var head = record_set[j].split(/\s+/)[0];
+			var cseq = record_set[j].split(/\s+/)[1];
 			if(head){
 				seq_list.push(head);
 				if(seq_list.size != seq_list.length){
@@ -1424,7 +1424,7 @@ function read_clustal(lines){
 					return {};
 				}	
 			}
-			if(! Object.keys(res).includes(record_set.split(/\s+/)[0])){
+			if(! Object.keys(res).includes(head)){
 				res[head] = cseq;
 			}else{
 				res[head] += cseq;

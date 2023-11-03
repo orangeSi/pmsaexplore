@@ -1411,9 +1411,7 @@ function read_clustal(lines){
 			var cseq = record_set[j].split(/\s+/)[1];
 			if(head){
 				seq_list.push(head);
-				console.log(seq_list.length);
-				console.log(seq_list.size);
-				if(seq_list.size != seq_list.length){
+				if(new Set(seq_list).size !== seq_list.length){
 					alert("error: 遇到重复的 id -> "+ head);
 					return {};
 				}
@@ -1436,7 +1434,7 @@ function read_clustal(lines){
 		if(i == 0){
 			last_seq_list = seq_list;
 			}else{
-				if(seq_list.length != last_seq_list.length){
+				if(seq_list.length !== last_seq_list.length){
 					alert("error: 参与比对的序列数量前后不一致!");
 					return {};
 				}

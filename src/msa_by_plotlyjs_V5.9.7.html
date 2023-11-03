@@ -870,9 +870,11 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 	var format = format_check(msa_str)
 	if(format == 'fasta'){
 		// read msa fasta
+		console.log("输入格式为fasta");
 		var msa = read_fasta(msa_str);
 	} else if(format == 'clustal'){
 		// read msa clustal
+		console.log("输入格式为clustal");
 		var msa = read_clustal(msa_str);
 	}else{
 		alert("Unknown format, failed to read alignment data.");

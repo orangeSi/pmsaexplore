@@ -242,7 +242,7 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 --------------
 </textarea>
 <br>
-上传本地序列比对文件： <input type="file" id = "upfile" > <input type="button" onclick="upload_msa()" value="上传！" />
+上传本地序列比对文件： <input type="file" id = "upfile" > <input type="button" id = "localmsafile" onclick="upload_file(this.id)" value="上传！" />
 <br>
 测tm的： <input type="button" onclick="test_run_read_clustal()" value="ZHAN" />
 <br>
@@ -265,8 +265,11 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 <br>
 <p id="region_annotation">可选1：<tspan class="template_id"></tspan>基于起始和终止位置(1-based)的注释信息：<input type="button" onclick="plot_msa(true, false, this, this.value, '添加注释!')" value="添加如下注释！" style="margin-top:5px" /> </p>
+纯测试模块： <input type="button" id = "test_bar_plot" onclick="proto_region_plot()" value="开测" style="margin-top:5px" />
 <textarea id="region_info" name="ssp" rows="5" cols="100" placeholder="10&#09;50&#09;xx&#10;80&#09;120&#09;yy&#10;其他序列ID&#09;10&#09;50&#09;xx&#10;">
 </textarea>
+<br>
+<input type="file" id = "upanno" > <input type="button" id = "localannofile" onclick="upload_file(this.id)" value="上传注释文件" />
 <br>
 <br>
 
@@ -1284,6 +1287,14 @@ function change_msa_seq_order(msa){
 	return new_msa;
 }
 
+//TODO: implement a generic function-like function for uploading different type of files
+function upload_file(ele_value){
+	if(ele_value == 'localmsafile'){
+		upload_msa();
+	}else if (ele_value == 'localannofile'){
+		upload_region();
+	}
+}
 
 //上传本地序列比对文件
 function upload_msa(){
@@ -1295,6 +1306,17 @@ function upload_msa(){
 		set_template();
     };
     reader.readAsText(file);
+}
+
+//上传本地注释文件
+function upload_region(){
+	var file = document.getElementById("upanno").files[0];
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		var textArea = document.getElementById("region_info");
+		textArea.value = e.target.result;
+	};
+	reader.readAsText(file);
 }
 
 
@@ -1555,12 +1577,24 @@ function get_mutations_inf(mutations_info){
 
 
 // 获取输入的位置列表信息
-function get_regions(region_id){
-	
+function get_regions(region_id){	
 	if(Object.keys(window.msa).length == 0 ){
 		console.log("here");
 		var msa_str = document.getElementById("msa").value;
-		var msa = read_fasta(msa_str);
+		var format = format_check(msa_str);
+		if(format == 'fasta'){
+			// read msa fasta
+			console.log("输入格式为fasta");
+			var msa = read_fasta(msa_str);
+		} else if(format == 'clustal'){
+			// read msa clustal
+			console.log("输入格式为clustal");
+			var msa = read_clustal(msa_str);
+		}else{
+			alert("Unknown format, failed to read alignment data.");
+			var msa = "";
+		}
+
 		window.msa = change_msa_seq_order(msa);
 	}
 	
@@ -1633,8 +1667,8 @@ function get_regions(region_id){
 		var rg_x = [];
 		var rg_y = [];
 		var rg_width = [];
-		rg_y_each += 1;
-		if(rg_y_each ==0){ rg_y_each +=1}
+		rg_y_each += 2;
+		//if(rg_y_each ==0){ rg_y_each +=1}
 
 		if(!(seq_id in window.msa)){
 			error_flag = true;
@@ -1726,19 +1760,6 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	view_block_size = 30;
 
 
-//some shit code for testing
-	var data0 = {
-  x: x,
-  y: y,
-  mode: "markers",
-  type: 'scattergl',
-  hovertemplate: "<br> x: %{x}<br>     y: %{y}<br>",
-  textfont: {
-	size: 13,
-	family: 'Courier New, monospace',
-	color: "black",
-  }
- }
 
 // data for residue annotation 
 	var data1 = {
@@ -1807,8 +1828,7 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	}else{
 		yaxis3_domain = [0, 0.1]; //[0, 100/layout_height]; // 一致性区域的高度区间
 		yaxis_domain = [0.12, 0.89]; //[100/layout_height+50/layout_height, 0.8]; msa多序列比对的高度区间
-	}
-		
+	}	
 	
 	
 	layout = {
@@ -1850,7 +1870,7 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
     zeroline: false,
     showgrid: false,
     
-    tickmode: "array",
+    //tickmode: "array",
     tickvals: ytickval,
     ticktext: pseq_name_list,
               
@@ -1908,6 +1928,7 @@ if(plot_regions_flag){
 		var customdata = rgs_dict[seq_id]['customdata'];
 		
 		console.log("start plot_regions_flag:")
+		console.log(seq_id);
 		console.log(rg_x);
 		console.log(rg_y);
 		console.log(rg_width);
@@ -1917,9 +1938,11 @@ if(plot_regions_flag){
 			color = color.concat(color);
 		}
 		
+		var region_height = Array(rg_y.length).fill(2);
 		var data4 = {
 		x: rg_x, // 指定每个区域中心的x坐标：把蛋白上每个domain实际的区域转化为msa中的坐标！[]
-		y: rg_y, // []
+		y: region_height, // []
+		base: rg_y, // []
 		width: rg_width, // []
 		customdata: customdata,
 		hovertemplate: seq_id + " 的高亮区域坐标: %{customdata}", // 定制hover 内容
@@ -1941,13 +1964,78 @@ if(plot_regions_flag){
 
 
 //data = [data4, data3, data2, data1]; 
-data.push(data3, data2, data1,data0 ); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
+data.push(data3, data2, data1); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
 
 Plotly.newPlot('myDiv', {data:data, layout:layout}); 
 
 
 // 跳转到指定开始位置
 return data, layout;
+}
+
+//shit code for testing stacked horizonal bar plot
+proto_region_plot = function(){
+	data = [];
+	layout = {
+  //grid: {rows: 2, columns: 1, pattern: 'independent'},
+  //sliders: sliders,
+  //height: "1600px",
+  autosize: false,
+  height: 300,
+  width: window.screen.availWidth*0.95,
+  shapes: [
+    {
+      type: 'rect',
+      x0: 0,
+      y0: 0,
+      x1: 0,
+      y1: 0,
+      line: {
+        color: 'rgba(128, 0, 128, 1)'
+      }
+    }
+     ]
+  }
+	var rgs_dict = get_regions("region_info");
+	for(var seq_id in rgs_dict){
+		var rg_x = rgs_dict[seq_id]['rg_x'];
+		var rg_y = rgs_dict[seq_id]['rg_y'];
+		var rg_width = rgs_dict[seq_id]['rg_width'];
+		var customdata = rgs_dict[seq_id]['customdata'];
+		
+		console.log("start plot_regions_flag:")
+		console.log(seq_id);
+		console.log(rg_x);
+		console.log(rg_y);
+		console.log(rg_width);
+		console.log("end:")
+		var color = ["green", "black", "red", "yellow", "blue"];
+		while(rg_width.length > color.length){
+			color = color.concat(color);
+		}
+		var region_height = Array(rg_y.length).fill(2)
+
+		var data4 = {
+		x: rg_x, // 指定每个区域中心的x坐标：把蛋白上每个domain实际的区域转化为msa中的坐标！[]
+		y: region_height,
+		base: rg_y, // []
+		width: rg_width, // []
+		customdata: customdata,
+		hovertemplate: seq_id + " 的高亮区域坐标: %{customdata}", // 定制hover 内容
+		ymin: -1,
+	    ymax: 1,
+	    type: 'bar',
+		xaxis: 'x', // 默认是x。即data4和data1公用一个x轴。
+		yaxis: 'y4', // 默认是y。
+		marker:{
+			color: color,
+		},
+		opacity: 0.6, // 这个trace的整体颜色透明度。
+		
+		}
+		data.push(data4);
+	}
+	Plotly.newPlot('myDiv', {data:data, layout:layout});
 }
 
 

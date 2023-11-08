@@ -1468,7 +1468,7 @@ function read_clustal(lines){
 
 // 读取点突变的位置信息
 function get_mutations_inf(mutations_info){
-	//("mutations_info"); //[ [pos, form_aa, to_aa, seq_id ], [pos2, form_aa2, to_aa2, seq_id ], ... ]
+	//("mutations_info"); //[ [os, form_aa, to_aa, seq_id ], [pos2, form_aa2, to_aa2, seq_id ], ... ]
 	
 	if(Object.keys(window.msa).length == 0 ){
 		console.log("here2");
@@ -1694,7 +1694,7 @@ function get_regions(region_id){
 
 
 
-function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
+function plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	//var jsonResult="{'x': [1,2,3,1,2,3], 'y':['A','M','W','X','N','W'], 'z':[0.1,0.1,0.8,0.1,0.1,0.1], 'template_x':['1','2','3','1','2','3']}";
 	//var res = JSON.parse(jsonResult);
 	//var res={'msa_len': 200, 'x': [0, 1, 2, 0, 1, 2], y: [0, 0, 0, 1, 1, 1], 
@@ -1726,7 +1726,21 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	view_block_size = 30;
 
 
-// data for alignment plot 
+//some shit code for testing
+	var data0 = {
+  x: x,
+  y: y,
+  mode: "markers",
+  type: 'scattergl',
+  hovertemplate: "<br> x: %{x}<br>     y: %{y}<br>",
+  textfont: {
+	size: 13,
+	family: 'Courier New, monospace',
+	color: "black",
+  }
+ }
+
+// data for residue annotation 
 	var data1 = {
   x: x,
   y: y,
@@ -1927,7 +1941,7 @@ if(plot_regions_flag){
 
 
 //data = [data4, data3, data2, data1]; 
-data.push(data3, data2, data1 ); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
+data.push(data3, data2, data1,data0 ); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
 
 Plotly.newPlot('myDiv', {data:data, layout:layout}); 
 

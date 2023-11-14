@@ -39,7 +39,7 @@
 
 
 
- <p>输入fasta格式的MSA序列(<tspan id="seq_number"></tspan>): <input type="button" onclick="clear_msa()" value="Clear Current sMSA" /></p>
+ <p>输入fasta或clustal格式的MSA序列(<tspan id="seq_number"></tspan>): <input type="button" onclick="clear_msa()" value="Clear Current sMSA" /></p>
  <textarea id="msa" name="msa" rows="20" cols="100" onchange="set_template()">
 >UrCas13d-HA
 -----------MAKKNKMKPRELREAQKKARQL--KAAEINNNAAPA--IAAMPAAEVIA
@@ -243,6 +243,8 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 --------------
 </textarea>
 <br>
+上传本地序列比对文件： <input type="file" id = "upfile" > <input type="button" id = "localmsafile" onclick="upload_file(this.id)" value="上传！" />
+<br>
 按照序列名称进行排序: <input type="checkbox" id="if_sort_seq_name" >
 <br>
 对序列名称做关键字匹配: <input type="text" id="seq_name_match_keyword" value="" placeholder="支持regex" > <tspan id="seq_num_after_filter"></tspan>
@@ -262,8 +264,11 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 <br>
 <p id="region_annotation">可选1：<tspan class="template_id"></tspan>基于起始和终止位置(1-based)的注释信息：<input type="button" onclick="plot_msa(true, false, this, this.value, '添加注释!')" value="添加如下注释！" style="margin-top:5px" /> </p>
+<!--纯测试模块： <input type="button" id = "test_bar_plot" onclick="proto_region_plot()" value="开测" style="margin-top:5px" /> -->
 <textarea id="region_info" name="ssp" rows="5" cols="100" placeholder="10&#09;50&#09;xx&#10;80&#09;120&#09;yy&#10;其他序列ID&#09;10&#09;50&#09;xx&#10;">
 </textarea>
+<br>
+<input type="file" id = "upanno" > <input type="button" id = "localannofile" onclick="upload_file(this.id)" value="上传注释文件" />
 <br>
 <br>
 
@@ -335,6 +340,14 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 
 <input type="button" onclick="change_fig_left_margin()" value="修改序列名称长度到set margin of sequence name region" /> 
 <input type="number" id="seq_name_left_margin" value="300" /><text>px</text>
+<br><br>
+
+<label for="scheme_select" >上色方案: </label>
+<select name="schemeid" id="scheme_select">
+	<option value="clustal">clustal</option>
+	<option selected="selected" value="clustal_v2">clustal_v2</option>
+	<option value="clustal_v2_dynamic">clustal_v2_dynamic</option>   
+</select>
 
 
 <br>
@@ -848,6 +861,13 @@ function cut_seq_by_start_end(){
 }
 
 
+//stupid function for testing read_clustal
+/*
+function test_run_read_clustal(){
+	var msa_str = document.getElementById("msa").value;
+	read_clustal(msa_str);
+}*/
+
 function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value, btn_new_value){
 	if(btn_raw_value != "" && btn_new_value != ""){
 		btn.value = btn_new_value;
@@ -856,9 +876,21 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 		console.log("startt ddddd="+btn.value);
 		
 	}
-	// read msa fasta
+	//msa format check
 	var msa_str = document.getElementById("msa").value;
-	var msa = read_fasta(msa_str);
+	var format = format_check(msa_str);
+	if(format == 'fasta'){
+		// read msa fasta
+		console.log("输入格式为fasta");
+		var msa = read_fasta(msa_str);
+	} else if(format == 'clustal'){
+		// read msa clustal
+		console.log("输入格式为clustal");
+		var msa = read_clustal(msa_str);
+	}else{
+		alert("Unknown format, failed to read alignment data.");
+		var msa = "";
+	}
 	msa = filter_seq_name(msa);
 	msa = change_msa_seq_order(msa);
 	console.log("msa=");
@@ -874,9 +906,12 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 	
 	window.msa = msa;
 	
+	var scheme = document.getElementById("scheme_select").value;
 	// 定义color
-	var colorscale = generate_colorscale("clustal_v2");
+	// var colorscale = generate_colorscale("clustal_v2");
+	var colorscale = generate_colorscale(scheme);
 	var the_colorscale = colorscale['config'];
+	console.log("the colorscale is: "+ the_colorscale);
 
 	
 	//自定义template
@@ -944,29 +979,74 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 	console.log(pseq_name_list);
 	var ytickval = [...Array(y_len).keys()];
 	
-	// msa每个位点的top频率
+	// msa每个位点的top频率, 残基分布
+	const aa_property = {
+		'A': 'N',
+		'I': 'N',
+		'L': 'N',
+		'M': 'N',
+		'F': 'N',
+		'W': 'N',
+		'V': 'N',
+		'C': 'N',
+		'K': '+',
+		'R': '+',
+		'E': '-',
+		'D': '-',
+		'N': 'NP',
+		'Q': 'NP',
+		'S': 'PP',
+		'T': 'PP',
+		'G': 'N',
+		'P': 'N',
+		'H': 'A',
+		'Y': 'A'
+	}
 	consensus_maxfreq_list = [];
+	aln_block_list = [];
+	posneg_list = [];
 	if(template_seq==""){
 		alert("error: template_seq is null!");
 	}
 	
 	// 定义 pos_from_seq_to_msa
 	for(var i=0; i< template_seq.length; i++){
-		var real_i = template_seq.slice(0,i+1).replaceAll("-", "").length;
+		//var real_i = template_seq.slice(0,i+1).replaceAll("-", "").length;
+		var real_i = get_template_x(i,template_seq)
 		if(pos_from_seq_to_msa.hasOwnProperty(real_i)){continue}
 		pos_from_seq_to_msa[real_i] = i;
 	}
 	
 	
 	var msapos = [...Array(template_seq.length).keys()];
+	var total = y_len;
 	for (var i=0; i < msapos.length; i++){
 		var base_column_dict = {};
-		var total = y_len;
+		var posneg_dict = {
+			'pos': 0,
+			'neg': 0
+		}
+		//var total = y_len;
 		var max_count = 0;
 		ytickval.forEach((j) => {
 			var base = pfa_dict[j][i];
 			if(base == "-"){return }; // return in ForEach mean continue!
-				
+			switch(aa_property[base]){
+				case '+':
+					posneg_dict['pos']+=1;
+					break;
+				case 'PP':
+					posneg_dict['pos']+=0.5;
+					break;
+				case '-':
+					posneg_dict['neg']+=1;
+					break;
+				case 'NP':
+					posneg_dict['neg']+=0.5;
+					break;
+				default:
+					break;
+			}	
 			if(! base_column_dict.hasOwnProperty(base)){
 				base_column_dict[base] = 0;
 			};
@@ -976,13 +1056,67 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 			};
 			
 			
-		});	
+		});
+		aln_block_list.push(base_column_dict);
+		var ttl_length = Object.values(base_column_dict).reduce((acc,curr) => acc+curr, 0);
+		Object.keys(posneg_dict).forEach((x) =>{
+			posneg_dict[x] /= ttl_length;
+		})
+		posneg_list.push(posneg_dict);
 		consensus_maxfreq_list.push(max_count/total);
 
 	}
+
+	// msa matrix中每个cell对应的z值(for heatmap color)
+	var txlist = [];
+	var tylist = [];
+	var tzlist = [];
+	var ttext_list = [];
+	var ttemplate_x_list = [];
+	msapos.forEach((x) => {
+		var pos_line = [];
+		var dynamic_scale = {};
+		if(scheme=='clustal_v2_dynamic'){
+			dynamic_scale = dynamic_scheming(aln_block_list[x]);
+		}
+		ytickval.forEach((y) =>{
+			txlist.push(x);
+			tylist.push(y);
+			var text = pfa_dict[y][x];
+			ttext_list.push(text);
+
+			switch(scheme){
+				case "clustal":
+				case "clustal_v2":
+					var z = get_z_for_colorscale(text, colorscale);
+					pos_line.push(z);
+				break;
+				case "clustal_v2_dynamic":
+					var z = get_dynamic_z_for_colorscale(text, dynamic_scale);
+					pos_line.push(z);
+				break;
+				default:
+					alert('unknown scheme!')
+			};
+			var template_x = get_template_x(x, template_seq);// teamplate在[0,x]之间不包括gap的长度即template_x;
+			var current_x = get_template_x(x, pfa_dict[y]);
+			ttemplate_x_list.push([template_x, current_x, pseq_name_list[y]]);
+
+		});
+		tzlist.push(pos_line);
+
+	});
+
+	var xlist = arr_elevate(txlist,msapos.length,ytickval.length,"Fortran").flat();
+	var ylist = arr_elevate(tylist,msapos.length,ytickval.length,"Fortran").flat();
+	var zlist = data_transpose(tzlist);
+	var text_list = arr_elevate(ttext_list,msapos.length,ytickval.length,"Fortran").flat();
+	var template_x_list = arr_elevate(ttemplate_x_list,msapos.length,ytickval.length,"Fortran").flat();
+	
+
 	
 	// msa matrix中每个cell对应的z值(for heatmap color) 
-	var xlist = [];
+	/*var xlist = [];
 	var ylist = [];
 	var zlist = [];
 	var text_list = [];
@@ -995,8 +1129,18 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 			var text = pfa_dict[y][x];
 			text_list.push(text);
 			
-		    var z = get_z_for_colorscale(text, colorscale);
-			z_line.push(z);
+			switch(scheme){
+				case "clustal":
+				case "clustal_v2":
+					var z = get_z_for_colorscale(text, colorscale);
+					z_line.push(z);
+				break;
+				case "clustal_v2_dynamic":
+					var z = get_dynamic_z_for_colorscale(text, aln_block_list[x], cri_mapper, colorscale);
+				break;
+				default:
+					alert('unknown scheme!')
+			};
 			var template_x = get_template_x(x, template_seq);// teamplate在[0,x]之间不包括gap的长度即template_x;
 			var current_x = get_template_x(x, pfa_dict[y]);
 			template_x_list.push([template_x, current_x, pseq_name_list[y]]);
@@ -1004,20 +1148,21 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 		});
 		zlist.push(z_line);
 
-	});
-	
+	});*/
+
 
 	
 	// output
 	var res = {};
-	res['x'] = xlist;
-	res['y'] = ylist;
-	res['z'] = zlist;
-	res['text'] = text_list;
-	res['template_x'] = template_x_list;
-	res['msa_len'] = x_lens[0];
+	res['x'] = xlist; // a list containing x coordinates of MSA matrix(length equals to MSA length)
+	res['y'] = ylist; // a list containing y coordinates of MSA matrix(length equals to number of sequences)
+	res['z'] = zlist; // a list containing z value for each residue in each sequence
+	res['text'] = text_list; // raw list of all residues in MSA(including gaps) shape:(x*y,1)
+	res['template_x'] = template_x_list; // a list containing real index of template and current sequences(shape:(x*y,1))
+	res['msa_len'] = x_lens[0]; 
 	res['the_colorscale'] = the_colorscale;
-	res['consensus_maxfreq_list'] = consensus_maxfreq_list;
+	res['consensus_maxfreq_list'] = consensus_maxfreq_list; // a list containing max frequency of each residues(length equals to MSA length)
+	res['posneg_list'] = posneg_list;  //a list containing amino acids electric charge distribution info.
 	res['pseq_name_list'] = pseq_name_list;
 	res['ytickval'] = ytickval;
 	res['template_pid'] = template_pid;
@@ -1056,9 +1201,309 @@ function get_z_for_colorscale(text, colorscale){
 
 }
 
+// TODO: generate dynamic scheme based on MSA results
+function dynamic_scheming(aln_block){
+	// initialize the scheme
+	var res_scheme = {
+		'A': 0.9,
+		'I': 0.9,
+		'L': 0.9,
+		'M': 0.9,
+		'F': 0.9,
+		'W': 0.9,
+		'V': 0.9,
+		'C': 0.9,
+		'K': 0.9,
+		'R': 0.9,
+		'E': 0.9,
+		'D': 0.9,
+		'N': 0.9,
+		'Q': 0.9,
+		'S': 0.9,
+		'T': 0.9,
+		'G': 0.6,
+		'P': 0.7,
+		'H': 0.9,
+		'Y': 0.9,
+		'-': 0.9
+	};
+	//criteria-altered residues mapper
+	const cri_list = {
+		'WLVIMAFCHP-0.6': {
+			'A': 0.1,
+			'I': 0.1,
+			'L': 0.1,
+			'M': 0.1,
+			'F': 0.1,
+			'W': 0.1,
+			'V': 0.1,
+			'C': 0.1,
+			'S': 0.4,
+			'T': 0.4,
+			'H': 0.8,
+			'Y': 0.8
+		},			  
+		'KR-0.6': {
+			'K': 0.2,
+			'R': 0.2,
+			'E': 0.3,
+			'D': 0.3,
+			'Q': 0.4,
+		},			  
+		'K,R,Q-0.8': {
+			'K': 0.2,
+			'R': 0.2,
+		},
+		'QE-0.5': {
+			'E': 0.3,
+			'Q': 0.4,
+		},			  
+		'E,Q,D-0.85': {
+			'E': 0.3
+		},
+		'K,R,Q-0.85': {
+			'D': 0.3
+		},
+		'ED-0.5': {
+			'D': 0.3
+		},
+		'N-0.5': {
+			'N': 0.4
+		},
+		'N,Y-0.85': {
+			'N': 0.4
+		},
+		'Q,E,K,R-0.85': {
+			'Q': 0.4,
+		},
+		'TS-0.5': {
+			'S': 0.4,
+			'T': 0.4,
+		},
+		'S,T-0.85': {
+			'S': 0.4,
+			'T': 0.4
+		},
+		'C-0.85': {
+			'C': 0.5
+		},
+		'W,Y,A,C,P,Q,F,H,I,L,M,V-0.85': {
+			'H': 0.8,
+			'Y': 0.8
+		}
+	};
+
+	var block_base = Object.keys(aln_block);
+	var block_set = new Set(block_base);
+	var cand_cri = {};
+	// filter the criteria which might involve in this site
+	Object.keys(cri_list).forEach((c) =>{
+		var char_c = c.split("-")[0];
+		set_char_c = new Set(char_c.replaceAll(',','').split('').join());
+		const intersect = new Set([...block_set].filter(x => set_char_c.has(x)));
+		if(intersect.size > 0){
+			cand_cri[c] = cri_list[c];
+		}
+	});
+	// console.log('these are candidate criterias: '+Object.keys(cand_cri));
+	// check if alignment site fulfill the criteria
+	Object.keys(cand_cri).forEach((c) =>{
+		var cri_judge = false;
+		cri_judge = decode_and_judge(c,aln_block);
+		if(cri_judge){
+			for(res in cand_cri[c]){
+				res_scheme[res] = cand_cri[c][res];
+			}
+		}
+	})
+	
+	return res_scheme;	
+}
+
+function decode_and_judge(cri,aln_block){
+	const ttl_length = Object.values(aln_block).reduce((acc,curr) => acc+curr, 0);
+	var decode_res = cri.split('-')[0];
+	var decode_threshold = cri.split('-')[1];
+	var judge = false;
+	if(decode_res.includes(',')){
+		var word_list = decode_res.split(',');
+		word_list.some((w) => {
+			if(aln_block.hasOwnProperty(w) && aln_block[w]/ttl_length > decode_threshold){
+				judge = true;
+				return true;
+			}
+		});
+		return judge;
+	}else{
+		var word_list = decode_res.split('');
+		var cumul_freq = 0;
+		word_list.forEach((w) =>{
+			if(aln_block.hasOwnProperty(w)){
+				var tmp_freq = aln_block[w]/ttl_length;
+				cumul_freq += tmp_freq;
+			}
+
+		});
+		if(cumul_freq > decode_threshold){
+			judge = true;
+		}
+		return judge;
+	}
+}
+
+// array transpose
+function data_transpose(data){
+	var tdata = [];
+	var check_dim = {};
+	for(var i=0;i < data.length;i++){
+		if(! Object.keys(check_dim).includes(data[i].length)){
+			check_dim[data[i].length] = 0;
+		}
+		check_dim[data[i].length]+=1;
+	}
+	if(Object.keys(check_dim).length > 1){
+		alert("error: expect every slice has same length,but got "+Object.keys(check_dim).length+" type of length.")
+		return tdata;
+	}
+	for(var j=0;j < Object.keys(check_dim)[0];j++){
+		tdata.push([]);
+	}
+
+	for(var j=0;j < Object.keys(check_dim)[0];j++){
+		for(var i=0;i < data.length;i++){
+			var ele_block = data[i][j];
+			tdata[j].push(ele_block);			
+		}
+	}
+	return tdata;
+}
+
+//rearrange flatten array to high-dimension array in two different manners
+function arr_elevate(arr,rows,cols,style = "C"){
+	if (arr.length !== rows * cols) {
+    throw new Error('Invalid array length for reshaping');
+	alert(Error);
+  }
+
+  const result = [];
+  switch(style){
+    case "C":
+    for (let i = 0; i < rows; i++) {
+      result[i] = [];
+      for (let j = 0; j < cols; j++) {
+        result[i][j] = arr[i * cols + j];
+      }
+    }
+    break;
+    case "Fortran":
+    [rows,cols] = [cols,rows];
+    for (let j = 0; j < cols; j++){
+      result[j] = [];
+      for (let i = 0; i < rows; i++){
+        result[j][i] = arr[i * cols + j];
+      }
+    }
+    break;
+	default:
+		alert("invalid arrange style!");
+	}
+	return result;
+}
+
+
+function get_dynamic_z_for_colorscale(text,colorscale){
+	if(! colorscale.hasOwnProperty(text)){
+		alert("error: text="+text+" not in colorscale"+colorscale);
+	}
+	return colorscale[text];
+}
+
+
+function test_switch_scheme(scheme){
+	var the_colors = {};
+	switch(scheme) {
+		case "clustal":
+		the_colors = {
+			"A": 'orange',
+			"B": '#fff',
+			"C": 'green',
+			"D": 'red',
+			"E": 'red',
+			"F": 'blue',
+			"G": 'orange',
+			"H": 'red',
+			"I": 'green',
+			"J": '#fff',
+			"K": 'red',
+			"L": 'green',
+			"M": 'green',
+			"N": '#fff',
+			"O": '#fff',
+			"P": 'orange',
+			"Q": '#fff',
+			"R": 'red',
+			"S": 'orange',
+			"T": 'orange',
+			"U": '#fff',
+			"V": 'green',
+			"W": 'blue',
+			"X": '#fff',
+			"Y": 'blue',
+			"Z": '#fff',
+			"Gap": '#fff'
+		};
+		break;
+		case "clustal_v2":
+		the_colors = {
+			"A": 'blue',
+			"I": 'blue',
+			"L": 'blue',
+			"M": 'blue',
+			"F": 'blue',
+			"W": 'blue',
+			"V": 'blue',
+			"K": 'red',
+			"R": 'red',
+			"E": 'magenta',
+			"D": 'magenta',
+			"N": 'green',
+			"Q": 'green',
+			"S": 'green',
+			"T": 'green',
+			"C": 'pink',
+			"G": 'orange',
+			"P": 'yellow',
+			"H": 'cyan',
+			"Y": 'cyan',
+			"Gap": 'white'
+		};
+		break;
+		case "clustal_v2_dynamic":
+		the_colors = {
+			0.5: 'blue',
+			1.5: 'red',
+			2.5: 'magenta',
+			3.5: 'green', 
+			4.5: 'pink',
+			5.5: 'orange',
+			6.5: 'yellow',
+			7.5: 'cyan',
+			8.5: 'white'
+		};
+		break;
+		
+		default:
+			alert('unknown scheme type!');
+}
+console.log(the_colors);
+}
+
+
+
 function generate_colorscale(scheme){
 	var the_colors = {};
-	if(scheme == "clustal"){ // 来自colorschemes from ggmsa at http://yulab-smu.top/ggmsa/articles/guides/Color_schemes_And_Font_Families.html，不过好像颜色和理化性质不匹配，所以建议改用下面的clustal_v2
+	switch(scheme){
+		case "clustal": // 来自colorschemes from ggmsa at http://yulab-smu.top/ggmsa/articles/guides/Color_schemes_And_Font_Families.html，不过好像颜色和理化性质不匹配，所以建议改用下面的clustal_v2
 	the_colors = {
 "A": 'orange',
 "B": '#fff',
@@ -1088,7 +1533,8 @@ function generate_colorscale(scheme){
 "Z": '#fff',
 "Gap": '#fff'
 };
-}else if(scheme == "clustal_v2"){ // 来自 https://www.jalview.org/help/html/colourSchemes/clustal.html
+break;
+	case "clustal_v2": // 来自 https://www.jalview.org/help/html/colourSchemes/clustal.html
 		the_colors = {
 "A": 'blue',
 "I": 'blue',
@@ -1112,10 +1558,24 @@ function generate_colorscale(scheme){
 "Y": 'cyan',
 "Gap": 'white'
 };
+break;
+	case "clustal_v2_dynamic":
+	the_colors = {
+0.5: 'blue',
+1.5: 'red',
+2.5: 'magenta',
+3.5: 'green', 
+4.5: 'pink',
+5.5: 'orange',
+6.5: 'yellow',
+7.5: 'cyan',
+8.5: 'white'
+};
+break;
 
-}else{
-		alert("error: not support scheme="+scheme+" !");
-		return {};
+	default:
+	alert("error: not support scheme="+scheme+" !");
+	return {};
 }
 		var colorscale = {};
 		colorscale['z'] = {};
@@ -1183,7 +1643,7 @@ for (var j = 0; j < t; j++){
     }else if(base== "T"){
       base_colorvalue  = 0.3;
     }else if(base == "C"){
-      base_colorvalue=0.5;
+      base_colorvalue=0.5;ame
     }else{
       base_colorvalue = 1;
     }
@@ -1260,6 +1720,38 @@ function change_msa_seq_order(msa){
 	return new_msa;
 }
 
+//TODO: implement a generic function-like function for uploading different type of files
+function upload_file(ele_value){
+	if(ele_value == 'localmsafile'){
+		upload_msa();
+	}else if (ele_value == 'localannofile'){
+		upload_region();
+	}
+}
+
+//上传本地序列比对文件
+function upload_msa(){
+    var file = document.getElementById("upfile").files[0];
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var textArea = document.getElementById("msa");
+        textArea.value = e.target.result;
+		set_template();
+    };
+    reader.readAsText(file);
+}
+
+//上传本地注释文件
+function upload_region(){
+	var file = document.getElementById("upanno").files[0];
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		var textArea = document.getElementById("region_info");
+		textArea.value = e.target.result;
+	};
+	reader.readAsText(file);
+}
+
 
 function change_template_id(e){
 	var new_choosen = e.value;
@@ -1272,9 +1764,23 @@ function change_template_id(e){
 }
 
 // 设置默认的template id 并且检查msa的序列长度是否一致！
+// branch read_clustal v1.1.8 update: support template setting for clustal-format files
 function set_template(){
 	var msa_str = document.getElementById("msa").value;
-	var msa = read_fasta(msa_str);
+	var format = format_check(msa_str);
+	if(format == 'fasta'){
+		// read msa fasta
+		console.log("输入格式为fasta");
+		var msa = read_fasta(msa_str);
+	} else if(format == 'clustal'){
+		// read msa clustal
+		console.log("输入格式为clustal");
+		var msa = read_clustal(msa_str);
+	}else{
+		alert("Unknown format, failed to read alignment data.");
+		var msa = "";
+	}
+
 	var default_template_id = Object.keys(msa)[0];
 	var seq_number = Object.keys(msa).length;
 	document.getElementById('seq_number').innerHTML=" 如下一共"+seq_number+"条序列 ";
@@ -1307,6 +1813,20 @@ function set_template(){
 	console.log(document.getElementById("templateid-select"));
 }
 
+function format_check(lines){
+	var format = "";
+	var first_line = lines.split(/\n+/)[0];
+	if(first_line.match(/CLUSTAL|clustal/)){
+		format = "clustal";
+		return format;
+	}else if(first_line.match(/^>[\S|\s]*/)){
+		format = "fasta";
+		return format;
+	}else{
+		alert("error: invalid input format, should be either fasta format or clustal format");
+		return format;
+	}	
+}
 
 function read_fasta(lines){
 	var res = {};
@@ -1344,7 +1864,58 @@ function read_fasta(lines){
 		res[cid] = cseq;
 		
 	}
-	//console.log(res);
+	console.log(res);
+	return res;
+}
+
+function read_clustal(lines){
+	var res = {};
+	//var lines_arr = lines.replace(/^\s*/,'').split(/\n+/);
+	var first_line = lines.split('\n')[0];
+	var lines_arr = lines.replace(first_line,'').replace(/^\s*/,'').replace(/\s*$/,'').split(/\n[^\S]*\n/)
+
+	//check alignment block format
+	var last_seq_list = [];
+	for(var i = 0; i < lines_arr.length; i++){
+		var seq_list = [];
+		var block = lines_arr[i];
+		var record_set = block.split(/\n/);
+		var seq_set = {};
+		for(var j=0;j < record_set.length; j++){
+			var head = record_set[j].split(/\s+/)[0];
+			var cseq = record_set[j].split(/\s+/)[1];
+			if(head){
+				seq_list.push(head);
+				if(new Set(seq_list).size !== seq_list.length){
+					alert("error: 遇到重复的 id -> "+ head);
+					return {};
+				}
+				if(!( head.match(/.*\S.*/) )){
+					alert("error: id 格式错误? "+e);
+					return {};
+				}
+				if(!( cseq.match(/\S+/) )){
+					alert("error: 序列内包括空格? "+e);
+					return {};
+				}
+				if(! Object.keys(res).includes(head)){
+					res[head] = cseq;
+				}else{
+					res[head] += cseq;
+				}	
+			}		
+		}
+		if(i == 0){
+			last_seq_list = seq_list;
+			}else{
+				if(seq_list.length !== last_seq_list.length){
+					alert("error: 参与比对的序列数量前后不一致!");
+					return {};
+				}
+				last_seq_list = seq_list;
+			}
+	}
+	console.log(res);
 	return res;
 }
 
@@ -1352,7 +1923,7 @@ function read_fasta(lines){
 
 // 读取点突变的位置信息
 function get_mutations_inf(mutations_info){
-	//("mutations_info"); //[ [pos, form_aa, to_aa, seq_id ], [pos2, form_aa2, to_aa2, seq_id ], ... ]
+	//("mutations_info"); //[ [os, form_aa, to_aa, seq_id ], [pos2, form_aa2, to_aa2, seq_id ], ... ]
 	
 	if(Object.keys(window.msa).length == 0 ){
 		console.log("here2");
@@ -1439,12 +2010,24 @@ function get_mutations_inf(mutations_info){
 
 
 // 获取输入的位置列表信息
-function get_regions(region_id){
-	
+function get_regions(region_id){	
 	if(Object.keys(window.msa).length == 0 ){
 		console.log("here");
 		var msa_str = document.getElementById("msa").value;
-		var msa = read_fasta(msa_str);
+		var format = format_check(msa_str);
+		if(format == 'fasta'){
+			// read msa fasta
+			console.log("输入格式为fasta");
+			var msa = read_fasta(msa_str);
+		} else if(format == 'clustal'){
+			// read msa clustal
+			console.log("输入格式为clustal");
+			var msa = read_clustal(msa_str);
+		}else{
+			alert("Unknown format, failed to read alignment data.");
+			var msa = "";
+		}
+
 		window.msa = change_msa_seq_order(msa);
 	}
 	
@@ -1517,8 +2100,8 @@ function get_regions(region_id){
 		var rg_x = [];
 		var rg_y = [];
 		var rg_width = [];
-		rg_y_each += 1;
-		if(rg_y_each ==0){ rg_y_each +=1}
+		rg_y_each += 2;
+		//if(rg_y_each ==0){ rg_y_each +=1}
 
 		if(!(seq_id in window.msa)){
 			error_flag = true;
@@ -1595,11 +2178,12 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	var z = res["z"];
 	var text = res["text"];
 	var n = res['msa_len']; // msa每条序列长度
-	var template_x = res["template_x"]; // template模板的坐标
+	var template_x = res["template_x"]; // template模板的坐标(every position has one corresponding template coordinate copy)
 	var the_colorscale = res["the_colorscale"];
 	var consensus_maxfreq_list = res['consensus_maxfreq_list'];
 	var pseq_name_list = res['pseq_name_list'];
-	var ytickval = res['ytickval'];
+	var posneg_list = res['posneg_list'];
+	var ytickval = res['ytickval']; //
 	var template_pid = res['template_pid'];
 
 
@@ -1610,6 +2194,8 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	view_block_size = 30;
 
 
+
+// data for residue annotation 
 	var data1 = {
   x: x,
   y: y,
@@ -1617,7 +2203,7 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
   text: text,
   type: 'scattergl',
   customdata: template_x,
-  hovertemplate: "<br> %{text} at %{customdata[0]} of "+template_pid +"<br>        %{customdata[1]} of <b>%{customdata[2]}</b><br>        %{x}+1 of the whole msa  <extra></extra>",
+  hovertemplate: "<br> %{text} at %{customdata[0]} of "+template_pid +"<br>        %{customdata[1]} of <b>%{customdata[2]}</b><br>        %{x}+1 of the whole msa  <extra></extra>",                                        
   //hovertemplate: "<br>myth %{x}: %{y}  %{customdata}",
   //hovertemplate: "<extra>%{fullData.customdata}</extra>",
   //xaxis: 'x', // 默认就是x
@@ -1631,7 +2217,7 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
  }
    
 
-
+// heatmap for each residue based on preinput color scheme
 	var data2 = {
   z: z,
   zmin: 0,
@@ -1649,6 +2235,21 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	
 	//var x3 = [1.0, 0.375, 0.375, 0.5, 0.25, 0.5, 0.125, 0.5, 0.25, 0.25, 0.5, 0.5, 0.25, 0.625, 0.625, 0.375, 0.25, 0.625, 0.25, 0.375, 0.375, 0.25, 0.125, 0.125, 0.25, 0.375, 0.5, 0.5, 0.25, 0.25, 0.375, 0.25, 0.375, 0.25, 0.125, 0.5, 0.375, 0.125, 0.125, 0.125, 0.25, 0.125, 0.25, 0.375, 0.25, 0.25, 0.375, 0.25, 0.25, 0.25, 0.125, 0.25, 0.375, 0.25, 0.125, 0.25, 0.375, 0.5, 0.75, 1.0, 0.625, 0.25, 0.625, 1.0, 0.75, 0.625, 1.0, 0.5, 1.0, 0.875, 0.375, 0.625, 0.625, 0.125, 0.125, 0.125, 0.5, 0.5, 0.375, 0.625, 0.5, 0.625, 0.5, 1.0, 0.5, 1.0, 0.75, 0.625, 1.0, 0.875, 0.25, 0.75, 0.375, 0.625, 0.875, 0.5, 0.375, 0.5, 0.375, 0.375, 0.375, 0.375, 0.5, 0.25, 0.375, 0.25, 0.375, 0.375, 0.25, 0.25, 0.25, 0.375, 0.25, 0.25, 0.25, 0.375, 0.5, 0.25, 0.5, 0.375, 0.5, 0.5, 0.375, 0.25, 0.375, 0.375, 0.5, 0.125, 0.625, 0.375, 0.375, 0.25, 0.125, 0.25, 0.125, 0.125, 0.125, 0.25, 0.375, 0.375, 0.25, 0.5, 0.375, 0.25, 0.375, 0.25, 0.25, 0.375, 0.25, 0.75, 1.0, 0.5, 0.5, 0.125, 0.25, 0.25, 0.25, 0.25, 0.25, 0.125, 0.125, 0.25, 0.25, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.375, 0.25, 0.375, 0.75, 0.5, 0.375, 1.0, 0.625, 1.0, 0.625, 0.625, 0.875, 0.375, 0.25, 1.0, 1.0, 0.75, 0.625, 0.5, 1.0, 1.0, 0.5, 0.5, 0.75, 0.625, 0.125, 0.125, 1.0, 1.0, 0.75, 0.625, 0.875, 1.0, 0.625, 0.875, 0.875, 1.0, 1.0, 1.0, 1.0, 0.875, 0.625, 1.0, 0.875, 0.75, 0.75, 0.5, 0.625, 0.5, 0.375, 0.5, 0.875, 0.625, 0.75, 0.625, 0.75, 0.625, 0.75, 0.5, 0.25, 0.5, 0.25, 0.375, 0.375, 0.25, 0.125, 0.125, 0.25, 0.375, 0.25, 0.125, 0.875, 0.375, 0.375, 1.0, 0.5, 0.125, 0.125, 0.5, 0.625, 0.375, 0.25, 0.5, 0.625, 0.875, 0.375, 0.375, 0.75, 0.25, 0.375, 0.625, 0.25, 0.5, 0.125, 0.125, 0.125, 0.125, 0.5, 0.5, 0.5, 0.375, 0.625, 0.375, 0.25, 0.5, 0.25, 0.375, 0.625, 0.5, 0.25, 0.375, 0.25, 0.25, 0.375, 0.625, 0.25, 0.375, 0.375, 0.5, 0.5, 0.125, 0.125, 0.375, 0.5, 0.625, 0.75, 0.75, 1.0, 0.75, 1.0, 0.25, 0.375, 0.625, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.375, 0.5, 0.75, 0.5, 0.375, 0.375, 0.375, 0.25, 0.125, 0.125, 0.125, 0.125, 0.25, 0.5, 0.25, 0.375, 0.5, 0.625, 0.375, 0.375, 0.75, 0.5, 0.5, 0.625, 0.625, 0.375, 0.25, 0.5, 0.375, 0.625, 1.0, 0.75, 0.25, 0.375, 0.5, 1.0, 0.5, 0.375, 0.25, 0.375, 0.25, 0.125, 0.125, 0.125, 0.125, 0.375, 0.5, 0.375, 0.375, 0.625, 0.875, 0.25, 0.25, 0.125, 0.125, 0.125, 0.375, 0.375, 0.375, 0.375, 0.5, 0.25, 0.625, 0.5, 0.375, 0.375, 0.625, 0.75, 0.625, 0.375, 0.5, 0.25, 0.5, 0.5, 0.375, 0.375, 0.375, 0.25, 0.5, 0.75, 0.5, 0.5, 1.0, 0.375, 0.25, 0.25, 0.875, 0.125, 0.5, 0.625, 1.0, 0.375, 0.25, 0.375, 0.875, 0.375, 0.375, 0.375, 0.25, 0.5, 0.25, 0.25, 0.25, 0.125, 0.125, 0.125, 0.125, 0.375, 0.375, 0.375, 0.625, 0.375, 0.375, 0.375, 0.625, 0.875, 0.625, 1.0, 0.5, 0.5, 0.5, 0.875, 0.375, 0.5, 1.0, 0.875, 0.75, 1.0, 0.875, 0.75, 0.625, 0.625, 0.75, 0.75, 1.0, 1.0, 0.375, 0.75, 0.875, 0.5, 0.25, 0.375, 0.375, 0.625, 0.25, 0.375, 0.375, 0.5, 0.5, 0.375, 0.375, 0.125, 0.125, 0.5, 0.875, 0.75, 0.625, 1.0, 0.5, 1.0, 0.375, 0.875, 0.5, 0.75, 0.375, 1.0, 1.0, 0.625, 0.625, 0.5, 0.25, 0.375, 0.625, 0.875, 0.25, 0.375, 0.375, 0.25, 0.625, 0.125, 0.375, 0.375, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.625, 0.25, 0.375, 1.0, 0.25, 0.5, 1.0, 1.0, 0.25, 0.5, 0.25, 0.25, 0.75, 0.5, 0.75, 1.0, 0.5, 0.25, 0.375, 1.0, 0.375, 0.5, 0.875, 1.0, 0.5, 0.25, 0.5, 0.875, 0.375, 0.375, 0.375, 0.25, 0.5, 0.25, 0.375, 0.25, 0.5, 0.125, 0.125, 0.125, 0.375, 0.375, 0.25, 0.375, 0.25, 0.375, 0.5, 0.875, 0.375, 0.375, 0.375, 0.75, 0.5, 0.375, 0.25, 0.75, 0.375, 0.375, 0.25, 0.625, 0.25, 0.25, 0.125, 0.25, 0.375, 0.125, 0.25, 0.125, 0.375, 0.375, 0.25, 0.375, 0.75, 0.25, 0.375, 0.125, 0.375, 0.25, 0.375, 0.25, 0.375, 0.25, 0.5, 0.625, 0.375, 0.25, 0.5, 1.0, 0.625, 0.75, 0.625, 0.5, 0.75, 0.25, 0.625, 0.75, 0.25, 0.875, 0.875, 0.875, 1.0, 1.0, 1.0, 1.0, 1.0, 0.625, 0.875, 0.875, 0.875, 0.75, 0.875, 0.875, 0.375, 1.0, 0.875, 0.625, 0.875, 1.0, 0.25, 0.5, 0.625, 0.625, 0.5, 0.625, 0.5, 0.375, 0.5, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.25, 0.5, 0.625, 0.375, 0.5, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.375, 0.625, 0.375, 0.25, 0.25, 0.75, 0.375, 0.375, 1.0, 0.5, 0.5, 0.125, 0.125, 0.125, 0.75, 0.375, 0.375, 0.75, 0.375, 0.25, 0.625, 1.0, 0.375, 0.5, 0.5, 0.625, 0.625, 0.625, 0.75, 0.625, 1.0, 0.375, 0.625, 0.125, 0.625, 0.375, 0.375, 0.25, 0.75, 0.75, 0.5, 0.25, 0.625, 0.5, 0.5, 0.75, 1.0, 0.5, 0.375, 0.625, 1.0, 0.75, 0.5, 0.25, 0.25, 0.25, 0.125, 0.75, 0.25, 0.25, 0.25, 0.25, 0.5, 0.375, 0.25, 0.375, 0.125, 0.375, 0.5, 0.5, 0.625, 0.125, 0.125, 0.5, 0.5, 0.625, 0.375, 0.5, 0.5, 0.125, 0.125, 0.375, 0.75, 0.25, 0.375, 0.625, 0.5, 0.375, 0.5, 0.125, 0.125, 0.125, 0.125, 0.125, 0.5, 0.625, 1.0, 1.0, 1.0, 1.0, 0.5, 0.875, 1.0, 1.0, 0.75, 0.625, 0.75, 0.5, 1.0, 1.0, 0.25, 1.0, 0.875, 0.5, 0.5, 0.75, 0.25, 0.5, 0.5, 0.25, 0.25, 0.375, 0.625, 0.375, 0.375, 0.625, 0.375, 1.0, 0.75, 0.625, 0.5, 0.5, 0.25, 0.875, 1.0, 1.0, 0.375, 0.375, 0.5, 0.75, 0.75, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.5, 0.875, 0.125, 0.75, 0.5, 1.0, 1.0, 0.75, 0.375, 0.625, 0.75, 0.25, 0.25, 0.375, 0.375, 0.375, 0.375, 0.5, 0.25, 0.375, 0.375, 0.375, 0.25, 0.5, 0.625, 0.375, 0.375, 1.0, 0.375, 0.375, 0.25, 0.625, 0.375, 0.25, 0.375, 0.5, 0.75, 0.5, 0.5, 0.75, 0.125, 0.125, 0.125, 0.375, 0.375, 0.875, 0.5, 0.625, 0.25, 0.375, 0.5, 0.125, 0.25, 0.375, 0.375, 0.625, 0.625, 0.25, 0.5, 0.75, 0.875, 0.625, 0.25, 0.875, 0.875, 0.375, 0.75, 0.75, 1.0, 0.875, 1.0, 0.75, 0.875, 0.25, 1.0, 0.5, 0.25, 0.625, 1.0, 1.0, 0.5, 0.875, 0.625, 0.5, 1.0, 0.75, 1.0, 1.0, 0.625, 0.75, 0.875, 0.75, 0.625, 0.75, 0.625, 0.875, 1.0, 1.0, 0.375, 0.375, 0.875, 0.75, 0.5, 0.375, 0.25, 0.25, 0.25, 0.375, 0.25, 0.25, 0.25, 0.5, 0.375, 0.5, 0.375, 0.375, 0.75, 0.25, 0.125, 0.375, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.125, 0.125, 0.125, 0.25, 0.25, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.75, 0.375, 0.375, 1.0, 0.625, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.5, 0.25, 0.25, 0.25, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.25, 0.375, 0.125, 0.375, 0.25, 0.25, 0.625, 0.375, 0.375, 0.125, 0.25, 0.125, 0.125, 0.25, 0.75, 0.5, 0.5, 0.375, 0.5, 0.25, 0.375, 0.5, 0.375, 0.25, 0.5, 0.625, 0.375, 0.375, 0.5, 0.5, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.375, 0.375, 0.25, 0.375, 0.375, 0.75, 1.0, 1.0, 0.25, 0.625, 0.375, 1.0, 0.875, 0.375, 0.625, 0.5, 0.875, 0.25, 0.375, 0.25, 0.375, 0.75, 0.75, 0.375, 0.75, 0.875, 0.25, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.25, 0.625, 0.5, 1.0, 0.875, 1.0, 0.375, 0.75, 1.0, 1.0, 1.0, 0.375, 0.625, 1.0, 0.875, 0.25, 0.375, 0.25, 0.5, 0.375, 0.25, 0.25, 0.25, 0.375, 0.125, 0.125, 0.125, 0.25, 0.375, 0.375, 0.25, 0.25, 0.375, 0.25, 0.625, 0.125, 0.125, 0.25, 0.375, 0.25, 0.375, 0.25, 0.5, 0.375, 0.5, 0.375, 0.75, 0.25, 0.625, 0.875, 0.5, 0.625, 0.75, 0.625, 0.875, 0.625, 0.375, 0.875, 0.875, 0.875, 1.0, 0.75, 0.5, 0.75, 1.0, 0.5, 0.875, 1.0, 1.0, 0.875, 0.875, 0.625, 0.375, 0.875, 1.0, 1.0, 0.75, 0.125, 0.125, 0.125, 0.125, 0.75, 0.625, 0.25, 0.25, 0.375, 0.25, 0.375, 0.25, 0.75, 0.75, 0.25, 0.375, 0.125, 0.5, 0.125, 0.125, 0.125];
 	var x3 = consensus_maxfreq_list;
+	var px3h = [];
+	var nx3h = [];
+	for(i = 0;i < posneg_list.length;i++){
+		Object.keys(posneg_list[i]).forEach((x) =>{
+			if(x=='pos'){
+				px3h.push(posneg_list[i][x]);
+			}else if(x=='neg'){
+				nx3h.push(-posneg_list[i][x]);
+			}else{
+				alert("unsupported amino acid property")
+			}
+		})
+	}
+	
+	// data for frequency bar plot
 	var data3 = {
     y: x3,
 	ymin: 0,
@@ -1659,24 +2260,46 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 	yaxis: 'y3', // 默认是y。
   };
 
+// data for electric charge consensus bar plot 
+   var data3h = {
+	y: px3h,
+	ymin: -1,
+	ymax: 1,
+	color: 'red',
+	type: 'bar',
+	xaxis: 'x',
+	yaxis: 'y5',
+   };
+   var data3h2 = {
+	y: nx3h,
+	ymin: -1,
+	ymax: 1,
+	color: 'magenta',
+	type: 'bar',
+	xaxis: 'x',
+	yaxis: 'y5',
+   };
+
 
 
 	
-	var layout_height = 300 + pseq_name_list.length * 60;
-	var	yaxis3_domain = [0, 0.25]; //[0, 100/layout_height]; // 一致性区域的高度区间
+	var layout_height = 360 + pseq_name_list.length * 60;
+	var yaxis3h_domain = [0.13,0.25] // 电荷一致性的高度区间
+	var	yaxis3_domain = [0, 0.12]; //[0, 100/layout_height]; // 一致性区域的高度区间
 	var yaxis_domain = [0.35, 0.85]; //[100/layout_height+50/layout_height, 0.8]; msa多序列比对的高度区间
 	
 	// 基于序列个数调整y比例分配
 	if(pseq_name_list.length <=3 ){ 
 		layout_height *= 1.3;
 	}else if(pseq_name_list.length >=6 && pseq_name_list.length <=20 ){
-		yaxis3_domain = [0, 0.2]; //[0, 100/layout_height]; // 一致性区域的高度区间
+		yaxis3_domain = [0, 0.09]; //[0, 100/layout_height]; // 一致性区域的高度区间
+		yaxis3h_domain = [0.1,0.2] // 电荷一致性的高度区间
 		yaxis_domain = [0.25, 0.87]; //[100/layout_height+50/layout_height, 0.8]; msa多序列比对的高度区间
 	}else{
-		yaxis3_domain = [0, 0.1]; //[0, 100/layout_height]; // 一致性区域的高度区间
+		yaxis3_domain = [0, 0.04]; //[0, 100/layout_height]; // 一致性区域的高度区间
+		yaxis3h_domain = [0.05,0.1]; //电荷一致性的高度区间
 		yaxis_domain = [0.12, 0.89]; //[100/layout_height+50/layout_height, 0.8]; msa多序列比对的高度区间
-	}
-		
+	}	
 	
 	
 	layout = {
@@ -1718,7 +2341,7 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
     zeroline: false,
     showgrid: false,
     
-    tickmode: "array",
+    //tickmode: "array",
     tickvals: ytickval,
     ticktext: pseq_name_list,
               
@@ -1732,8 +2355,11 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
 			constraintoward: "left", // x轴左对齐
 			},
 	yaxis3: { 
-		domain: yaxis3_domain, //[0, 0.2],// 蛋白一致性区域
+		domain: yaxis3_domain, //[0, 0.2],// 残基一致性区域
 		
+	},
+	yaxis5: {
+		domain: yaxis3h_domain, // 电荷一致性区域
 	},
 	
 	xaxis4: {
@@ -1756,8 +2382,9 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
         color: 'rgba(128, 0, 128, 1)'
       }
     }
-     ]
-  
+     ],
+	barmode: 'overlay'
+
   
   }
 
@@ -1776,6 +2403,7 @@ if(plot_regions_flag){
 		var customdata = rgs_dict[seq_id]['customdata'];
 		
 		console.log("start plot_regions_flag:")
+		console.log(seq_id);
 		console.log(rg_x);
 		console.log(rg_y);
 		console.log(rg_width);
@@ -1785,9 +2413,11 @@ if(plot_regions_flag){
 			color = color.concat(color);
 		}
 		
+		var region_height = Array(rg_y.length).fill(2);
 		var data4 = {
 		x: rg_x, // 指定每个区域中心的x坐标：把蛋白上每个domain实际的区域转化为msa中的坐标！[]
-		y: rg_y, // []
+		y: region_height, // []
+		base: rg_y, // []
 		width: rg_width, // []
 		customdata: customdata,
 		hovertemplate: seq_id + " 的高亮区域坐标: %{customdata}", // 定制hover 内容
@@ -1809,7 +2439,7 @@ if(plot_regions_flag){
 
 
 //data = [data4, data3, data2, data1]; 
-data.push(data3, data2, data1 ); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
+data.push(data3, data3h, data3h2, data2, data1); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
 
 Plotly.newPlot('myDiv', {data:data, layout:layout}); 
 
@@ -1817,6 +2447,71 @@ Plotly.newPlot('myDiv', {data:data, layout:layout});
 // 跳转到指定开始位置
 return data, layout;
 }
+
+//shit code for testing stacked horizonal bar plot
+/*proto_region_plot = function(){
+	data = [];
+	layout = {
+  //grid: {rows: 2, columns: 1, pattern: 'independent'},
+  //sliders: sliders,
+  //height: "1600px",
+  autosize: false,
+  height: 300,
+  width: window.screen.availWidth*0.95,
+  shapes: [
+    {
+      type: 'rect',
+      x0: 0,
+      y0: 0,
+      x1: 0,
+      y1: 0,
+      line: {
+        color: 'rgba(128, 0, 128, 1)'
+      }
+    }
+     ]
+  }
+	var rgs_dict = get_regions("region_info");
+	for(var seq_id in rgs_dict){
+		var rg_x = rgs_dict[seq_id]['rg_x'];
+		var rg_y = rgs_dict[seq_id]['rg_y'];
+		var rg_width = rgs_dict[seq_id]['rg_width'];
+		var customdata = rgs_dict[seq_id]['customdata'];
+		
+		console.log("start plot_regions_flag:")
+		console.log(seq_id);
+		console.log(rg_x);
+		console.log(rg_y);
+		console.log(rg_width);
+		console.log("end:")
+		var color = ["green", "black", "red", "yellow", "blue"];
+		while(rg_width.length > color.length){
+			color = color.concat(color);
+		}
+		var region_height = Array(rg_y.length).fill(2)
+
+		var data4 = {
+		x: rg_x, // 指定每个区域中心的x坐标：把蛋白上每个domain实际的区域转化为msa中的坐标！[]
+		y: region_height,
+		base: rg_y, // []
+		width: rg_width, // []
+		customdata: customdata,
+		hovertemplate: seq_id + " 的高亮区域坐标: %{customdata}", // 定制hover 内容
+		ymin: -1,
+	    ymax: 1,
+	    type: 'bar',
+		xaxis: 'x', // 默认是x。即data4和data1公用一个x轴。
+		yaxis: 'y4', // 默认是y。
+		marker:{
+			color: color,
+		},
+		opacity: 0.6, // 这个trace的整体颜色透明度。
+		
+		}
+		data.push(data4);
+	}
+	Plotly.newPlot('myDiv', {data:data, layout:layout});
+}*/
 
 
 window.onload = function(){  

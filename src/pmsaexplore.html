@@ -1,9 +1,15 @@
 <html>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <head>
-	<title>v6.0.0</title>
+	<title>v6.0.2</title>
+
+    <!-- Molstar CSS & JS -->
+    <link rel="stylesheet" type="text/css" href="src/pdbe-molstar-3.1.2.css">
+	<script type="text/javascript" src="src/pdbe-molstar-plugin-3.1.2.js"></script>
+
+
 	<!-- Load plotly.js into the DOM -->
-	<script src='https://cdn.plot.ly/plotly-2.12.1.min.js'></script>
+	<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
 	<!--<script src="https://biowasm.com/cdn/v3/aioli.js"></script> -->
 	<!--<script src='plotly-2.12.1.min.js'></script> -->
 
@@ -11,6 +17,7 @@
 	<!-- 
 	ChangeLog:
 		todo: 增加muscle在线比对功能 + 三维结构可视化
+		v6.0.2: 增加三维结构可视化，并和一级序列msa建立互动！
 		v6.0.0:
 			参考赵博钉钉聊天中的几个优化方向 + 增加正负电荷的一致性柱状图。
 			优化多条序列的高亮注释功能。
@@ -329,6 +336,10 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
  
 <br>
 <br>
+<p id="do_mutations">可选6：<tspan class="template_id"></tspan>, 上传本地的 蛋白三维结构的pdb格式的文件 <input type="file" id="pdb_file" onchange="read_pdb_file(event)" /> 
+</p>
+<br>
+<br>
 <br>
 <br>
 
@@ -353,8 +364,17 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 
 <br>
 
+<div style="display: flex;flex-direction: row; justify-content: space-between;">
+	<div id='myDiv' style="float: left; width:60%" >
+		<!-- Plotly chart will be drawn inside this DIV -->
+	</div>
 
-<div id='myDiv'><!-- Plotly chart will be drawn inside this DIV --></div>
+	<div  id='pdbDiv' style="float: right; width:35%;  position:relative; margin-right: 1%; margin-top:5%; margin-bottom: 5%; ";>
+		<!-- render protein 3D structure in here -->
+	
+		<!--<img src="" id="img_test" width="200"  />-->
+	</div>
+</div>
 
 <!-- 下面color schemes表格来源https://www.jalview.org/help/html/colourSchemes/clustal.html -->
 
@@ -362,7 +382,9 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 
 <br>
 <br>
-<table id="color_scheme_table" border="1" style="margin-left: auto;margin-right: auto;">
+
+<div>
+ <table id="color_scheme_table" border="1" style="margin-left: auto;margin-right: auto; width: 50%">
       <tbody><tr>
         <th>Clustal X Default Colouring</th>
       </tr>
@@ -447,7 +469,10 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
             </tr>
           </tbody></table></td>
       </tr>
-    </tbody></table>
+    </tbody>
+ </table>
+</div>
+
 
 <script>
 
@@ -459,6 +484,53 @@ window.data = [];
 window.layout = {};
 window.msa = {};
 window.regions_data = "";
+window.plotly_fig_width = 0.95;
+
+
+
+// 读取上传的本地pdb文件
+async function read_pdb_file(event) {
+  const file = event.target.files.item(0);
+  const text = await file.text();
+  alert(text);
+
+  window.plotly_fig_width = 0.6;
+  Plotly.relayout('myDiv', {width: window.innerWidth * window.plotly_fig_width });
+  //document.getElementById('img_test').setAttribute('src', 'src/x.gif');
+  create_pdb_view("pdbDiv", text);
+  //document.getElementById("output").innerText = text
+}
+
+// 使用pdbe-molstar来渲染三维结构
+window.viewerInstance = new PDBeMolstarPlugin();
+function create_pdb_view(vid, pdb_str){
+ 	 //Create plugin instance
+	var url = URL.createObjectURL(new Blob([pdb_str]));
+    console.log("url2 for myth="+url);
+    //Set options (Checkout available options list in the documentation)
+    var options = {
+        //moleculeId: '2nnu',
+         customData: {
+           url: url,
+           format: 'pdb'
+         },
+        hideControls: true
+      }
+      
+    //Get element from HTML/Template to place the viewer 
+    var viewerContainer = document.getElementById(vid);
+  
+    //Call render method to display the 3D view
+    window.viewerInstance.render(viewerContainer, options);
+	console.log("done for pdb view");
+}
+
+
+// plotlyjs 和 pdbe-molstar的交互
+
+
+
+
 
 // 搜索序列motif
 function search_motif(aid){
@@ -530,6 +602,20 @@ function find_all_motifs(seq, motif){ // return [[ start, end, match],[start, en
 	console.log(indexPairs); // output: [9, 12], [19, 22], [29, 32]
 	return indexPairs;
 }
+
+
+
+// 当浏览器窗口变化时，根据父容器大小变化动态改变plotlyjs画布的宽度。
+window.addEventListener('resize', function() {
+    //var container = document.getElementById('myDiv');
+    //var width = container.offsetWidth;
+    //var height = container.offsetHeight;
+    
+    // 更新图表大小
+    Plotly.relayout('myDiv', {width: window.innerWidth * window.plotly_fig_width });
+});
+
+
 
 function plot_jump_to_x(e){
 	var xstart = 0;
@@ -1179,7 +1265,24 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 	
 	console.log("msa:");
 	console.log(msa);
+
 	alert("ok");
+
+	// get hover data
+	document.getElementById('myDiv').on('plotly_hover', function (eventdata){
+    var points = eventdata.points[0],
+        pointNum = points.pointNumber;
+		// curveNumber: 从0开始的整数，表示图右上角的legend图例，比如图例中有3个，即取0和1和2;
+		// x: x轴坐标值;
+		// name: lengend中的名字
+  	 	console.log("curveNumber="+points.curveNumber+"; pointNum="+pointNum+";x="+points.x+";y="+points.y);
+
+		// hight pdbe-molstart 
+		window.viewerInstance.visual.select({ data: [{ struct_asym_id: 'A', start_residue_number: points.x, end_residue_number: points.x, color:{r:255,g:255,b:0}, focus: false }]}); // 高亮 chain A上的某个区域。
+		
+	});
+
+
 	if(btn_raw_value != "" && btn_new_value != ""){
 		btn.value = btn_raw_value;
 		console.log("end plot:"+btn.value);
@@ -2307,9 +2410,10 @@ function plot_msa_by_plotlyjs(res, plot_regions_flag, plot_second_struct_flag){
   //grid: {rows: 2, columns: 1, pattern: 'independent'},
   //sliders: sliders,
   //height: "1600px",
-  autosize: false,
+  autosize: true,
+  responsive: true,
   height: layout_height,
-  width: window.screen.availWidth*0.95,
+  width: window.innerWidth  * window.plotly_fig_width , // plotlyj 画图的宽度width(window.screen.availWidth是指整个显示器物理屏幕，window.innerWidth是指浏览器窗口的宽度)
   margin: {l: fig_left_margin}, // 左侧(1即left)margin(px)
   xaxis: {
     range: [-0.5, view_block_size +0.5],
@@ -2442,7 +2546,7 @@ if(plot_regions_flag){
 //data = [data4, data3, data2, data1]; 
 data.push(data3, data3h, data3h2, data2, data1); // 最后画data1，这样data1就在data2上方，不会被data2盖住。
 
-Plotly.newPlot('myDiv', {data:data, layout:layout}); 
+Plotly.newPlot('myDiv', {data:data, layout:layout}, {responsive: true}); 
 
 
 // 跳转到指定开始位置
@@ -2511,7 +2615,7 @@ return data, layout;
 		}
 		data.push(data4);
 	}
-	Plotly.newPlot('myDiv', {data:data, layout:layout});
+	Plotly.newPlot('myDiv', {data:data, layout:layout},  {responsive: true});
 }*/
 
 

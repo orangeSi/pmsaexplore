@@ -1277,8 +1277,13 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 		// name: lengend中的名字
   	 	console.log("curveNumber="+points.curveNumber+"; pointNum="+pointNum+";x="+points.x+";y="+points.y);
 
+		// msa 坐标转为模板的坐标
+		var template_id = document.getElementById("templateid-select").value;
+		var template_highlight_x = window.msa[template_id].slice(0, points.x).replaceAll("-", "").length;
+		console.log("模板"+template_id+" 高亮第"+template_highlight_x+"aa");
+
 		// hight pdbe-molstart 
-		window.viewerInstance.visual.select({ data: [{ struct_asym_id: 'A', start_residue_number: points.x, end_residue_number: points.x, color:{r:255,g:255,b:0}, focus: false }]}); // 高亮 chain A上的某个区域。
+		window.viewerInstance.visual.select({ data: [{ struct_asym_id: 'A', start_residue_number: template_highlight_x, end_residue_number: template_highlight_x, color:{r:255,g:255,b:0}, focus: false }]}); // 高亮 chain A上的某个区域。
 		
 	});
 

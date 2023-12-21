@@ -1,7 +1,7 @@
 <html>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <head>
-	<title>v6.0.2</title>
+	<title>v7.1.0</title>
 
     <!-- Molstar CSS & JS -->
     <link rel="stylesheet" type="text/css" href="src/pdbe-molstar-3.1.2.css">
@@ -259,7 +259,7 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 <input type="button" onclick="run_msa_v3()" value="Run muscle_v3" style="margin-top:5px;display: none" />
 <br>
-<input type="button" onclick="plot_msa(false,false, this, this.value, '开始画图!')" value="开始画图Plot!" style="margin-top:5px" />
+<input type="button" onclick="plot_msa(false,false, this, this.value, '开始画图!', 'msa')" value="开始画图Plot!" style="margin-top:5px" />
 <br>
 <br>
 <br>
@@ -271,7 +271,10 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 
 <br>
 <br>
-<p id="region_annotation">可选1：<tspan class="template_id"></tspan>基于起始和终止位置(1-based)的注释信息：<input type="button" onclick="plot_msa(true, false, this, this.value, '添加注释!')" value="添加如下注释！" style="margin-top:5px" /> </p>
+<p id="region_annotation">可选1：<tspan class="template_id"></tspan>基于起始和终止位置(1-based)的注释信息：<input type="button" onclick="plot_msa(true, false, this, this.value, '添加注释!', 'msa')" value="msa中添加如下注释！" style="margin-top:5px" />
+<input type="button" onclick="plot_msa(true, false, this, this.value, '添加注释!', 'pdb')" value="pdb中添加如下注释！" style="margin-top:5px" />
+ </p>
+
 <!--纯测试模块： <input type="button" id = "test_bar_plot" onclick="proto_region_plot()" value="开测" style="margin-top:5px" /> -->
 <textarea id="region_info" name="ssp" rows="5" cols="100" placeholder="10&#09;50&#09;xx&#10;80&#09;120&#09;yy&#10;其他序列ID&#09;10&#09;50&#09;xx&#10;">
 </textarea>
@@ -338,6 +341,7 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 <p id="do_mutations">可选6：<tspan class="template_id"></tspan>, 上传本地的 蛋白三维结构的pdb格式的文件 <input type="file" id="pdb_file" onchange="read_pdb_file(event)" /> 
 </p>
+curveNumber: <input type="number" id="curveNumber" value="4" />
 <br>
 <br>
 <br>
@@ -485,14 +489,65 @@ window.layout = {};
 window.msa = {};
 window.regions_data = "";
 window.plotly_fig_width = 0.95;
+window.pdb_last_hovered_info = "";
+
+// hover pdb 的同时 触发 plotlyjs的hover event
+document.addEventListener('PDB.molstar.mouseover', (e) => { 
+	//console.log("mouseover get e=");
+	var chain_name = e.eventData.auth_asym_id;// auth_asym_id（Author Chain ID）： 它是由数据提交者（作者）指定的链标识符。在 PDB 文件中，每个链都由一个独特的 auth_asym_id 标识，该标识是由数据提交者选择或指定的。auth_asym_id 用于区分多链结构中的不同链。label_asym_id（Labelled Chain ID）： 它是为用户（或程序）提供的链标识符。与 auth_asym_id 不同，label_asym_id 可能会经过一些规范化或处理，以提供更一致和易于理解的链标识符。在某些情况下，label_asym_id 可能与 auth_asym_id 相同，但它的目的是为了提供更加用户友好的标识。在一个 PDB 文件中，auth_asym_id 和 label_asym_id 可能相同，也可能不同，具体取决于数据的来源和处理。在实际使用中，一般建议使用 label_asym_id 以获得更一致和易于理解的链标识。
+	var residue_pos = e.eventData.seq_id; // 氨基酸残基位置
+	var residue_name = e.eventData.comp_id; // 氨基酸残基 
+	var pdb_last_hovered_info = chain_name+":"+residue_pos+":"+residue_name;
+	if(window.pdb_last_hovered_info == pdb_last_hovered_info){ return 0}
+	console.log("pdb hovered info as below:");
+	console.log("氨基酸链="+chain_name);
+	console.log("氨基酸位置："+residue_pos);
+	console.log('氨基酸='+residue_name);
+	window.pdb_last_hovered_info = chain_name+":"+residue_pos+":"+residue_name;
+
+	// 高亮 对应氨基酸残基 在 plotlyjs 中的位置~
+	var curveNumber = parseInt(document.getElementById('curveNumber').value);
+	console.log("curveNumber+1="+(curveNumber+1));
+
+	// 氨基酸残基 坐标转为 msa 的坐标
+	var template_id = document.getElementById("templateid-select").value;
+	var msa_pos = get_msa_pos_by_residue_pos(residue_pos, window.msa[template_id]);
+
+	// 当前可视区的是否包含 要hover的x坐标?
+	var [view_rg_x, view_rg_y] = window.layout.xaxis.range;
+	if ( msa_pos >= (view_rg_x+ (view_rg_y - view_rg_x)*0.2) && msa_pos <= (view_rg_y - (view_rg_y - view_rg_x)*0.2) ){
+		console.log("不需要调整可视区域~");
+	}else{
+		console.log("调整可视区域~");
+		window.layout.xaxis.range = [msa_pos-15, msa_pos+15];
+		Plotly.relayout('myDiv', window.layout);
+	}
+	Plotly.Fx.hover('myDiv',[{ curveNumber: curveNumber, xval: msa_pos } ]); // 使用x和pointNumber好像不行，改为xval就可以trigger hover了。
+	console.log("highlight at ploylyjs done");
+});
 
 
+// 氨基酸残基 坐标转为 msa 的坐标
+function get_msa_pos_by_residue_pos(residue_pos, msa_seq){
+	var residue_num = 0;
+	var msa_pos_1based = 1;
+	for (let i = 0; i < msa_seq.length; i++) {
+		if(msa_seq.charAt(i) != "-"){
+			residue_num +=1;
+			if(residue_num == residue_pos){
+				msa_pos_1based = i +1;
+				break;
+			}
+		}
+	}	
+	return msa_pos_1based;
+}
 
 // 读取上传的本地pdb文件
 async function read_pdb_file(event) {
   const file = event.target.files.item(0);
   const text = await file.text();
-  alert(text);
+  //alert(text);
 
   window.plotly_fig_width = 0.6;
   Plotly.relayout('myDiv', {width: window.innerWidth * window.plotly_fig_width });
@@ -616,7 +671,7 @@ window.addEventListener('resize', function() {
 });
 
 
-
+// heatmap 图 可视区域的起始端跳转到指定坐标
 function plot_jump_to_x(e){
 	var xstart = 0;
 	var xend=0;
@@ -955,7 +1010,7 @@ function test_run_read_clustal(){
 	read_clustal(msa_str);
 }*/
 
-function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value, btn_new_value){
+function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value, btn_new_value, for_msa_or_pdb){
 	if(btn_raw_value != "" && btn_new_value != ""){
 		btn.value = btn_new_value;
 		btn.value = btn_new_value;
@@ -1240,6 +1295,10 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 
 	
 	// output
+	if(for_msa_or_pdb == "pdb"){	
+		alert("暂不支持pdb~");
+		return 0;
+	}
 	var res = {};
 	res['x'] = xlist; // a list containing x coordinates of MSA matrix(length equals to MSA length)
 	res['y'] = ylist; // a list containing y coordinates of MSA matrix(length equals to number of sequences)
@@ -1282,7 +1341,7 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 		var template_highlight_x = window.msa[template_id].slice(0, points.x).replaceAll("-", "").length;
 		console.log("模板"+template_id+" 高亮第"+template_highlight_x+"aa");
 
-		// hight pdbe-molstart 
+		// hightlign高亮 pdbe-molstart 
 		window.viewerInstance.visual.select({ data: [{ struct_asym_id: 'A', start_residue_number: template_highlight_x, end_residue_number: template_highlight_x, color:{r:255,g:255,b:0}, focus: false }]}); // 高亮 chain A上的某个区域。
 		
 	});
@@ -1300,6 +1359,8 @@ function plot_msa(plot_regions_flag, plot_second_struct_flag, btn, btn_raw_value
 function get_template_x(x, template_seq){ // x is 0-based
  return template_seq.slice(0, x+1).replaceAll("-", "").length ;
 }
+
+
 function get_z_for_colorscale(text, colorscale){
     if (text == "-"){ text = "Gap"};
     if(! colorscale['z'].hasOwnProperty(text)){
@@ -1763,12 +1824,12 @@ for (var j = 0; j < t; j++){
 }
 
 // sort dict的key, 加了reverse()就变成从大到小排序了!
-	function sortObj(obj) {
+function sortObj(obj) {
 	  return Object.keys(obj).sort().reverse().reduce(function (result, key) {
 		result[key] = obj[key];
 		return result;
 	  }, {});
-	}
+}
 
 //根据序列名称进行选择过滤
 function filter_seq_name(msa){
@@ -1869,7 +1930,7 @@ function change_template_id(e){
 		template_ids[i].innerHTML= "模板"+new_choosen+" ";
 	}
 	document.getElementById("jump_pos_of_template_id").value= "跳转到 "+new_choosen+ " jump to " ;
-	plot_msa(false,false, "", "", "");
+	plot_msa(false,false, "", "", "", "msa");
 }
 
 // 设置默认的template id 并且检查msa的序列长度是否一致！
@@ -2524,6 +2585,8 @@ if(plot_regions_flag){
 		}
 		
 		var region_height = Array(rg_y.length).fill(1.8);
+
+		// 每个data4都是一个多区域注释(domain)的track
 		var data4 = {
 		x: rg_x, // 指定每个区域中心的x坐标：把蛋白上每个domain实际的区域转化为msa中的坐标！[]
 		y: region_height, // []

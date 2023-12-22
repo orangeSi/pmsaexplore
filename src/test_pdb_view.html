@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <link rel="shortcut icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAD5UExURQAAACQ1RH6SkoKVli2h2tI/LBIXL2xrYoibnJZdqC2d1ZNboxMPJdFGKhK1eIdUt+iJMC2g2fMvItFALC0+TS+59x6wdCw7SiErPS2g25VdpuOGOh5aSYGUlZNbqueHOM89LCs9TOSHOYCTlRYYMR2vbyY8S5ZdqO+JMxyuc8w/K4CTlR6wdOaJO9VALSw9TIGUluSHOiye1phfqn6Tliuf1uKHNZpgqx2odB+ydh6vdCUuQWhLkxcaMh+zd4OXmeSHOy2j3OqKPCw+TBYZMZlfq5deqR6vdNRBLS5ATtVBLS4/Ti6n4tpCLi0/TS9BUJ1ir5xhrdNBLSJTHIoAAAA9dFJOUwBhG+vl4Y8FNOkhHGwkczFj0ybY/SuMnDYyzJ4YyjWSL+A1y+OClc4PPz7a5N+7oszox66svGDFLNj0mDZdQChMAAABH0lEQVQ4y4XRWVuCQBSA4QmBgZS0rIQitsDc27cLULFFTdv+/49piJmQQU/c8XzvGR7mIJR/BAWBj3BRAoVwMhx2MdxLypb+T393dbDvTz6a6/sp7bOmM9CAedKlZV3bPN8wHel7zouV/vC4sydNeXGTzfeiqCA8W+nSjvFh9MoLrx/bStLfGsktFgS+i0exjd1Z2gvCurdqIyJ095xtISeq6pda/RVmtiUmpnUHlc+eX1Jx/AewScVS6qB1Qvb1VAw6yWv5iBNyGPpmkAg6wZ0hh09hxTCCqNdm31w5o5X2A1E0gnZ2lUzElxrt48VtbhdU9D3Wx7vbqCis1saeiE/VAjoR13Bn/wd0pPtwJ6JigJ1s6WoBdoQMEe5E8P0HpPxDW5UCLSMAAAAASUVORK5CYII=" />
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=1" />
+    <title>LiteMol Simple Controller Example</title>    
+    
+    <link rel="stylesheet" href="./LiteMol-plugin.css" type="text/css" />
+    <script src="./LiteMol-plugin.js"></script>
+
+    <style>
+        #app {
+            position: relative;
+            margin-top: 80px;
+            margin-bottom: 400px;
+            width: 640px;
+            height: 480px;
+        }    
+
+        #viewer1 {
+            position: relative;
+            margin-top: 80px;
+            margin-bottom: 400px;
+            width: 640px;
+            height: 480px;
+        }
+        body {
+            font-family: sans-serif;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    
+    上传本地结构文件<input type="file" id = "upstruct" > <input type="button" id = "localstructfile" onclick="main_workflow(this.id)" value="上传！" />
+    <br>
+    <br>
+    <textarea id="pdb" name="pdb" rows="20" cols="100" ></textarea>
+    <br>
+    <input type="button" id = "testbutton" onclick="show_selected()" value="测试跨域选择3D对象" />
+    <br>
+    <div id="interactions"></div>
+    <br>
+    <div id="app"></div>
+    <script>
+
+    
+    function main_workflow(ele_value){
+        if(ele_value == 'localstructfile'){
+            upload_file();
+        }
+    }
+
+
+    
+
+    function upload_file(){
+        var file = document.getElementById("upstruct").files[0];
+        var reader = new FileReader();
+        var pdb_raw = "";
+        reader.onload = function(e) {
+            var textArea = document.getElementById("pdb");
+            textArea.value = e.target.result;
+            pdb_raw = e.target.result;
+            var rid = (Math.random() + 1).toString(36).substring(2);
+            var structdis = document.getElementById('app');
+            if(structdis.innerHTML != ""){
+                console.log("LiteMol visualization content already exists, clear");
+                structdis.innerHTML = "";
+            }
+            display_3d(pdb_raw,rid);
+        }
+        reader.readAsText(file);
+    }
+
+
+    function display_3d(localdata,rid){
+        var plugin = LiteMol.Plugin.create({target: '#app'});
+        console.log("displaying structure from "+rid);
+        plugin.loadMolecule({
+            id: rid,
+            data: localdata,
+            modelRef: 'model',
+            moleculeRef: 'molecule',
+            format: 'pdb'
+        })
+
+        var molecule = plugin.context.select(LiteMol.Bootstrap.Entity.Molecule.Model)[0];
+        if(!molecule){
+            console.log('molecule not loaded '+molecule);
+        }else{
+            console.log('molecule selected '+molecule);
+        }
+
+        //var dtree = plugin.context.tree.refs.data;
+        //var model1 = dtree['model'];
+        var aa2 = Object.keys(plugin.context.tree.refs.data);
+        console.log('this is the keyes of tree data: '+aa2);
+        //console.log('this is structure of tree data: '+plugin.context.tree.refs.data);
+        /*let action = LiteMol.Bootstrap.Tree.Transform.build()
+            .add(plugin.context.tree.root,LiteMol.Bootstrap.Entity.Transformer.Data.FromData,{data: localdata, id: rid})
+            .then(LiteMol.Bootstrap.Entity.Transformer.Molecule.CreateFromData, {format:'pdb', customId: rid},{isBinding: true, ref: 'molecule'});
+        plugin.applyTransform(action);
+        
+        var molecule = plugin.context.select('molecule')[0];
+        if(!molecule){
+            console.log('molecule not loaded');
+            console.log(plugin.context.select('molecule'));
+        }else{
+            console.log('molecule selected');
+        }*/
+
+        /*let action2 = LiteMol.Bootstrap.Tree.Transform.build()
+            .add(molecule, LiteMol.Bootstrap.Entity.Transformer.Molecule.CreateModel,{modelIndex: 0}, {isBinding: false,ref: 'model'})
+            .then(LiteMol.Bootstrap.Entity.Transformer.Molecule.CreateMacromoleculeVisual, { polymer: true, polymerRef: 'polymer-visual', het: true, water: true });
+         plugin.applyTransform(action2);*/   
+        let highlight = LiteMol.Bootstrap.Event.Molecule.ModelHighlight.getStream(plugin.context).subscribe(e => showInteraction('highlight', e.data));
+        console.log(plugin.context);
+
+
+        let qmark= LiteMol.Bootstrap.Event.Entity.CurrentChanged.getStream(plugin.context).subscribe(e => {
+            let sel = plugin.context.select('molecule')[0];
+            let model = LiteMol.Bootstrap.Tree.Selection.byRef('model')
+            let sel2 = plugin.context.select(model);
+            let root = plugin.context.tree.root;
+            //let sr = root.subtree();
+            //console.log(sr);
+            console.log(sel);
+            console.log(sel2);
+            console.log(root);
+            console.log("this is the tree structure of instance:");
+            console.log(plugin.context.tree.refs.data);
+        //console.log(typeof(md));
+            if(!sel){
+                console.log('model not selected '+sel);
+            }else{
+                console.log('model selected '+sel);
+            }
+            const h_res = [2,10,15];
+            sel.applySelection({ 0:h_res});
+        });
+
+        plugin.command(LiteMol.Bootstrap.Command.Visual.ResetScene, {});
+        
+        //plugin.command(LiteMol.Bootstrap.Command.Entity.Highlight, { entities: sel, isOn: true});
+        //LiteMol.Bootstrap.Command.Molecule.Highlight.dispatch(plugin.context,{model, query, isOn: true });
+        /*let p_select = LiteMol.Core.Structure.Query.sequence({seqNumber: 15}, {seqNumber: 25});
+        let action = Transform.build()
+            .add(visual, Transformer.Molecule.CreateSelectionFromQuery, { p_select, name: 'test_select' }, { ref: 'sequence-selection' })
+            // here you can create a custom style using code similar to what's in 'Load Ligand'
+            .then(Transformer.Molecule.CreateVisual, { style: Visualization.Molecule.Default.ForType.get('BallsAndSticks') });
+        
+        applyTransforms(action).then(() => {                
+            Command.Visual.UpdateBasicTheme.dispatch(plugin.context, { visual, theme });
+            Command.Entity.Focus.dispatch(plugin.context, selectNodes('sequence-selection'))
+            // alternatively, you can do this
+            //Command.Molecule.FocusQuery.dispatch(plugin.context, { model: selectNodes('model')[0] as any, query })
+        });*/
+        
+    }
+
+    function show_selected(){
+        var app_ele = document.getElementById('app');
+        var plugin = app_ele;
+        console.log(plugin.context);
+        
+
+    }
+
+    
+
+    function showInteraction(type, i) {
+        let interactivityTarget = document.getElementById('interactions');
+        console.log('si function triggered.')
+        if (!i) { // can be undefined meaning "empty interaction"
+            interactivityTarget.innerHTML = `${type}: nothing<br/>` + interactivityTarget.innerHTML;
+            return;    
+        }
+        
+        // you have access to atoms, residues, chains, entities in the info object.
+        interactivityTarget.innerHTML = `${type}: ${i.residues[0].authName} ${i.residues[0].chain.authAsymId} ${i.residues[0].authSeqNumber}<br/>` + interactivityTarget.innerHTML;
+    }
+
+    //generate coordinates of residues after mouseover on Molecule
+    function getAtombyCoor(data){
+        res_data = {}
+        if(!data){
+            console.log('No residue found.')
+            return res_data;
+        }
+
+        res_data[data.residues[0].authSeqNumber] = data.residues[0].authAsymId;
+        console.log("retrieved residues data looks like this:"+res_data);
+        
+    }
+
+    console.log('displaying default online structure data');
+    var plugin = LiteMol.Plugin.create({target: '#app'});
+    var sid = '1jj2';
+    /*plugin.loadMolecule({
+        sid,
+        format: 'cif',
+        url:'https://www.ebi.ac.uk/pdbe/static/entry/1jj2_updated.cif',
+        moleculeRef: sid+'-molecule',
+        modelRef: sid+'-model'
+    })*/
+
+    /*let action = plugin.createTransform()
+        .add(plugin.context.tree.root,LiteMol.Bootstrap.Entity.Transformer.Data.Download,{url: 'https://www.ebi.ac.uk/pdbe/static/entry/1jj2_updated.cif',
+    type: 'String'})*/
+        
+
+
+    </script>
+</body>
+</html>

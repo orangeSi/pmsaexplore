@@ -38,8 +38,25 @@
 	
 	-->
 	<style>
+		
+		#pdbDiv {
+			float: right;
+			width: 35%; 
+			position:relative;
+			margin-right: 1%;
+			margin-top:5%;
+			margin-bottom: 5%;
+		}
+
+		#myDiv {
+			float: left; 
+			width:60%
+		}
+
+
 		body { font-size: 100%}
 		p,textarea {margin-bottom: 2px }
+
 	</style>
 </head>
 
@@ -341,7 +358,6 @@ LKNHGYT-------KDFVKALNSPFGYNIPRFKNLSIEQLFDR--NEYLTEK--------
 <br>
 <p id="do_mutations">可选6：<tspan class="template_id"></tspan>, 上传本地的 蛋白三维结构的pdb格式的文件 <input type="file" id="pdb_file" onchange="read_pdb_file(event)" /> 
 </p>
-curveNumber: <input type="number" id="curveNumber" value="4" />
 <br>
 <br>
 <br>
@@ -369,15 +385,12 @@ curveNumber: <input type="number" id="curveNumber" value="4" />
 <br>
 
 <div style="display: flex;flex-direction: row; justify-content: space-between;">
-	<div id='myDiv' style="float: left; width:60%" >
-		<!-- Plotly chart will be drawn inside this DIV -->
-	</div>
-
-	<div  id='pdbDiv' style="float: right; width:35%;  position:relative; margin-right: 1%; margin-top:5%; margin-bottom: 5%; ";>
-		<!-- render protein 3D structure in here -->
+	<!-- Plotly chart will be drawn inside this DIV -->
+	<div id='myDiv'></div>
+	<!-- render protein 3D structure in here -->
 	
-		<!--<img src="" id="img_test" width="200"  />-->
-	</div>
+	<!--<img src="" id="img_test" width="200"  />-->
+	<div  id='pdbDiv'></div>
 </div>
 
 <!-- 下面color schemes表格来源https://www.jalview.org/help/html/colourSchemes/clustal.html -->
@@ -506,8 +519,9 @@ document.addEventListener('PDB.molstar.mouseover', (e) => {
 	window.pdb_last_hovered_info = chain_name+":"+residue_pos+":"+residue_name;
 
 	// 高亮 对应氨基酸残基 在 plotlyjs 中的位置~
-	var curveNumber = parseInt(document.getElementById('curveNumber').value);
-	console.log("curveNumber+1="+(curveNumber+1));
+	//var curveNumber = parseInt(document.getElementById('curveNumber').value);
+	var curveNumber = document.getElementById('myDiv').data.length-1;
+	console.log("curveNumber="+(curveNumber));
 
 	// 氨基酸残基 坐标转为 msa 的坐标
 	var template_id = document.getElementById("templateid-select").value;
@@ -574,10 +588,19 @@ function create_pdb_view(vid, pdb_str){
       
     //Get element from HTML/Template to place the viewer 
     var viewerContainer = document.getElementById(vid);
-  
+	var content = viewerContainer.innerHTML;
+
     //Call render method to display the 3D view
-    window.viewerInstance.render(viewerContainer, options);
+	//console.log(typeof viewerContainer.innterHTML);
+	if(content != ''){
+		console.log("Molstar visualization content already exists, clear");
+        window.viewerInstance.visual.update(options);
+
+	}else{
+		window.viewerInstance.render(viewerContainer, options);
+	}
 	console.log("done for pdb view");
+	console.log(typeof viewerContainer.innerHTML);
 }
 
 
